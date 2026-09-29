@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import optuna
 import pandas as pd
@@ -57,10 +59,10 @@ def objectivexgb(trial):
 
 # dtrain = xgb.DMatrix(main.X_train_sc, label=main.y_train)  # ONLY FOR XGB
 # dvalid = xgb.DMatrix(main.X_test_sc, label=main.y_test)  # ONLY FOR XGB
-
+start_time = time.time()
 study = optuna.create_study(direction="maximize")
 study.optimize(objective,
-               n_trials=50)  # 200 for XGB, if the results stagnate or do not improve by much we stop the trials
+               n_trials=5)  # 200 for XGB, if the results stagnate or do not improve by much we stop the trials
 print(study.best_trial)
 print("Number of finished trials: ", len(study.trials))
 print("Best trial:")
@@ -72,3 +74,4 @@ for key, value in trial.params.items():
     print("    {}: {}".format(key, value))
 
 best_params = study.best_params
+print("--- %s seconds ---" % (time.time() - start_time))

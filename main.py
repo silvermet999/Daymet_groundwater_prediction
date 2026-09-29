@@ -5,6 +5,8 @@ import seaborn as sns
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
+from statsmodels.tools import add_constant
+
 
 
 # df0 = pd.read_csv("datasets/daymet0.csv")
@@ -17,7 +19,7 @@ from sklearn.model_selection import train_test_split
 #     return df
 
 df = pd.read_csv("datasets/daymet.csv")
-df["lat"].nunique() # 93 puits
+df["lat"].nunique()
 
 # gw_df = pd.read_csv("datasets/GWL0.csv")
 # gw_long = gw_df.melt(
@@ -44,12 +46,12 @@ df["tavg (deg c)"] = (df["tmax (deg c)"] + df["tmin (deg c)"]) / 2
 alpha = 1.26
 es = 0.6108 * np.exp((17.27 * df["tavg (deg c)"])/ (df["tavg (deg c)"] + 237.3))
 ea = df["vp (Pa)"] / 1000
-delta = (4098 * es)/((df["tavg (deg c)"] + 237.3)**2)
-gamma = 0.066
-rn = df["srad (W/m^2)"] * df["dayl (s)"] / 1e6
-df["pet"] = alpha * (delta / (delta + gamma)) * rn
-df["wat_bal"] = df["prcp (mm/day)"] - df["pet"]
-df["sum_wat_bal"] = df.groupby("ID")["wat_bal"].cumsum()
+# vapor pressure deficit
+df["vpd"] = es - ea
+# delta = (4098 * es)/((df["tavg (deg c)"] + 237.3)**2)
+# gamma = 0.066
+# rn = df["srad (W/m^2)"] * df["dayl (s)"] / 1e6
+# df["pet"] = alpha * (delta / (delta + gamma)) * rn
 
 
 
@@ -60,7 +62,7 @@ def correlation_heatmap(): # VP is + correlated with tmax and tmin // tmax is + 
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
     sns.heatmap(corr, annot=True, cmap=cmap, vmax=.3, center=0,
                 square=True, linewidths=.5, cbar_kws={"shrink": .5})
-    plt.savefig("corr_feat.png")
+    plt.savefig("corr.png")
 
 
 
@@ -75,34 +77,19 @@ def feature_plot():
         plt.savefig(f"plot_{site_id}.png")
 
 def vif_funct():
-    df_num = df.drop(["ID", "gwl"], axis=1)
-    vif = pd.DataFrame({"feature": df_num.columns, "VIF": [variance_inflation_factor(df_num.values, i) for i in range(df_num.shape[1])]})
+    X = df.drop(["ID", "gwl"], axis=1)
+    Xc = add_constant(X)
+    vif = pd.Series(
+        [variance_inflation_factor(Xc.values, i) for i in range(1, Xc.shape[1])],
+        index=X.columns
+    ).sort_values(ascending=False)
     return vif
 # vp (Pa)  9.451984e+00  // dayl (s)  8.053110e+00
 
-df = df.drop(["vp (Pa)", "sum_wat_bal"], axis=1)
+df_vif = df.drop(["vp (Pa)", "tmax (deg c)", "tmin (deg c)"], axis=1)
 
-X = df.drop(["year", "yday", "gwl", "ID"], axis=1)
-y = df["gwl"]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+X = df_vif.drop(["year", "yday", "gwl", "ID"], axis=1)
+y = df_vif["gwl"]
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, shuffle=True, random_state=0)
 
@@ -112,9 +99,6 @@ X_test_sc = scaler.transform(X_test)
 X_train_scaled = pd.DataFrame(X_train, columns=X.columns)
 X_test_scaled = pd.DataFrame(X_test, columns=X.columns)
 
-# [I 2026-09-23 19:14:12,685] Trial 2 finished with value: 0.18545076292065454 and parameters: {'rf_max_depth': 171, 'rf_n_estimators': 60}. Best is trial 0 with value: 0.192179429588696.
-# [I 2026-09-23 19:36:02,967] Trial 4 finished with value: 0.019178117222788883 and parameters: {'gb_n_estimators': 28, 'gb_learning_rate': 0.041214172103686865, 'gb_max_depth': 3}. Best is trial 0 with value: 0.2588294856911901.
-# [I 2026-09-23 20:01:30,516] Trial 3 finished with value: 0.06998034166623315 and parameters: {'n_estimators': 685, 'learning_rate': 0.11722262954430264, 'max_depth': 4, 'min_child_weight': 9, 'subsample': 0.7830166168752186, 'colsample_bytree': 0.9118279529827669, 'reg_alpha': 0.0001824977499260441, 'reg_lambda': 0.01144346763699817}. Best is trial 2 with value: 0.21327336117921045.
 
 
 # StandardScaler
