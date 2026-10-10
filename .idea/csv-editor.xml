@@ -10,6 +10,20 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/plots/test.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/src/GWL0.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/src/coordinates0.csv">
           <value>
             <Attribute>

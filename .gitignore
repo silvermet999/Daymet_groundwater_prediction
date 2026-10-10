@@ -1,7 +1,4 @@
 datasets
 src
-plots/prcp
-plots/srad
-plots/swe
-plots/temp avg
-plots/vp
+src/all_ID.csv
+src/001_RSESQ_niveaux_eau_2026-08-04.xlsx

@@ -1,0 +1,67 @@
+XGB param search
+Best trial:
+  Value: 0.9997206405217082
+  Params: 
+    n_estimators: 39
+    learning_rate: 0.15221024036816133
+    max_depth: 8
+    min_child_weight: 4
+    subsample: 0.8338818781124975
+    colsample_bytree: 0.814782173388384
+    reg_alpha: 0.9857289954384345
+    reg_lambda: 6.137611450745331e-07
+--- 17.631743907928467 seconds ---
+
+XGB train and test
+0.9997409381188995
+--- 1.9812991619110107 seconds ---
+
+RF
+Number of finished trials:  5
+Best trial:
+  Value: 0.9999732360794102
+  Params: 
+    max_depth: 39
+    n_estimators: 35
+--- 1342.7947807312012 seconds ---
+0.999973616690424
+--- 133.42160987854004 seconds ---
+
+
+#########################################################
+XGB
+Best trial:
+  Value: 0.9877290454489451
+  Params:
+    n_estimators: 92
+    learning_rate: 0.08053485609966904
+    max_depth: 6
+    min_child_weight: 8
+    subsample: 0.9932757157106065
+    colsample_bytree: 0.5800200684194798
+    reg_alpha: 0.005992652330418648
+    reg_lambda: 5.609263583911366e-05
+--- 21.928629159927368 seconds ---
+0.9914552112971505
+--- 2.1554880142211914 seconds ---
+
+Best trial:
+  Value: 0.9999721578103109
+  Params:
+    n_estimators: 89
+    learning_rate: 0.23161928510947036
+    max_depth: 8
+    min_child_weight: 5
+    subsample: 0.9056294651435699
+    colsample_bytree: 0.9283082869832222
+    reg_alpha: 0.00019366612487545449
+    reg_lambda: 0.0002471795191074976
+--- 22.447608947753906 seconds ---
+0.999971927750531
+--- 2.5981390476226807 seconds ---
+
+
+
+
+0.9999737693325982
+--- 185.8223316669464 seconds ---
