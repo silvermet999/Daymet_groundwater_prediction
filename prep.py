@@ -30,8 +30,8 @@ if __name__ == "__main__":
     result = []
     for i in coordinates.itertuples(index=False):
         params = {
-            "lat": i.LATITUDE,
-            "lon": i.LONGITUDE,
+            "lat": i.LATITUDE, #45.8782355735536, # 49.08858
+            "lon": i.LONGITUDE, # -73.1290083455576 # -66.6684
             "vars": "tmax,tmin,prcp,srad,vp,swe,dayl"
         }
         response = requests.get(url, params=params)
