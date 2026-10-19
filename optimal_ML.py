@@ -8,11 +8,12 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.model_selection import cross_val_score, TimeSeriesSplit, KFold
 from xgboost import XGBRegressor as xgb
 
-import main
+from main import scale_site
 from sklearn.metrics import make_scorer, r2_score
 
-def nse(obs, sim, mask):
-    return 1 - (((obs - sim) ** 2)*mask).sum() / ((obs - obs.mean()) ** 2).sum()
+
+def nse(obs, sim):
+    return 1 - ((obs - sim) ** 2).sum() / ((obs - obs.mean()) ** 2).sum()
 def objective(trial):
     # gb_n_estimators = trial.suggest_int("gb_n_estimators", 5, 50)
     # gb_learning_rate = trial.suggest_float("gb_learning_rate", 1e-3, 1e-1, log=True)
@@ -55,9 +56,23 @@ def objective(trial):
     # y_pred = obj.predict(main.X_test_all)
     # r2...
 
-    obj.fit(main.X_train_all.to_numpy(), y_train.to_numpy())
-    pred = obj.predict(main.X_test_all.to_numpy())
-    score = nse(y_test.to_numpy(), pred, 1) # main.mask_test.to_numpy()
+    df, _ = scale_site()
+
+    mask_train = df["mask_train"]
+    mask_val = df["mask_val"]
+    mask_test = df["mask_test"]
+
+    X_train = df["X_train"][mask_train]
+    X_val = df["X_val"][mask_val]
+    X_test = df["X_test"][mask_test]
+
+    y_train = df["y_train"][mask_train]
+    y_val = df["y_val"][mask_val]
+    y_test = df["y_test"][mask_test]
+
+    obj.fit(X_train.to_numpy(), y_train.to_numpy().ravel())
+    pred = obj.predict(X_test.to_numpy())
+    score = nse(y_test.to_numpy().ravel(), pred.ravel())
 
     return score
 

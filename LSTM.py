@@ -15,7 +15,7 @@ from torch import nn
 from torch.optim import RMSprop
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from svrg import SVRG
+# from svrg import SVRG
 
 
 def get_series_for_outlier_detection(data_scaled, mask_raw, column_name):
