@@ -45,10 +45,6 @@ def objective(trial):
               random_state=42,
               n_jobs=-1,
               **param)
-    # cv = KFold(n_splits=5, shuffle=True, random_state=42)
-    
-    # score = cross_val_score(obj, main.X_train_all, y_train, cv=5,
-    #                         scoring="r2").mean()
 
     #
     # y_test = main.y_test_sec.fillna(0)
@@ -73,6 +69,11 @@ def objective(trial):
     obj.fit(X_train.to_numpy(), y_train.to_numpy().ravel())
     pred = obj.predict(X_test.to_numpy())
     score = nse(y_test.to_numpy().ravel(), pred.ravel())
+
+    # cv = KFold(n_splits=5, shuffle=True, random_state=42)
+    #
+    # score = cross_val_score(obj, X_train.to_numpy(), y_train.to_numpy().ravel(), cv=5,
+    #                         scoring="r2").mean()
 
     return score
 
