@@ -184,7 +184,7 @@ test_loader = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num
 
 
 print("loaded")
-model1 = EDLSTM(n_vars= 10).cuda()
+model1 = EDLSTM(n_vars= 32).cuda()
 print("model")
 
 

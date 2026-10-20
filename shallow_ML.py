@@ -70,10 +70,9 @@ if __name__ == "__main__":
         best_gb_param = {'n_estimators': 47, 'learning_rate': 0.061573566036953464, 'max_depth': 11}
         model = RandomForestRegressor(**best_gb_param)
     else:
-        best_xgb_param = {'n_estimators': 89, 'learning_rate': 0.23161928510947036, 'max_depth': 8,
-                          'min_child_weight': 5,
-                          'subsample': 0.9056294651435699, 'colsample_bytree': 0.9283082869832222,
-                          'reg_alpha': 0.00019366612487545449, 'reg_lambda': 0.0002471795191074976}
+        best_xgb_param = {"colsample_bytree": 0.7875429935811782, "learning_rate": 0.07850245127227708, "max_depth": 8,
+                          "min_child_weight": 8, "n_estimators": 85, "reg_alpha": 8.678053133506951e-05,
+                          "reg_lambda": 1.9948778966859684e-06, "subsample": 0.7595133180855639}
         model= XGBRegressor(**best_xgb_param)
     start_time = time.time()
     model.fit(main.X_train_sc, main.y_train)

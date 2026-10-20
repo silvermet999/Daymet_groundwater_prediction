@@ -118,7 +118,7 @@ df = pd.read_csv("datasets/70ID_daymet_gwl.csv")
 df["DATE"] = pd.to_datetime(df["DATE"])
 # df["tavg (deg c)"] = (df["tmax (deg c)"] + df["tmin (deg c)"]) / 2
 # df = df.drop(["tmax (deg c)", "tmin (deg c)"], axis=1)
-#
+# #
 # alpha = 1.26
 # es = 0.6108 * np.exp((17.27 * df["tavg (deg c)"]) / (df["tavg (deg c)"] + 237.3))
 # ea = df["vp (Pa)"] / 1000
@@ -139,18 +139,50 @@ def minmaxsc(val, min_val, max_val):
     scaled = (val - min_val) / (max_val - min_val)
     return scaled
 
+def add_features(g):
+    g = g.sort_values("DATE").copy()
+    g["tmean"] = (g["tmax (deg c)"] + g["tmin (deg c)"]) / 2
+    g["trange"] = g["tmax (deg c)"] - g["tmin (deg c)"]
+
+    for w in (7, 30, 90, 180, 365):
+        g[f"prcp_sum_{w}"] = g["prcp (mm/day)"].rolling(w).sum()
+        g[f"tmean_avg_{w}"] = g["tmean"].rolling(w).mean()
+        g[f"srad_avg_{w}"] = g["srad (W/m^2)"].rolling(w).mean()
+
+    g["swe_max_30"] = g["swe (kg/m^2)"].rolling(30).max()
+    g["swe_diff_7"] = g["swe (kg/m^2)"].diff(7)   # snowmelt or accumulation
+    g["vp_avg_30"] = g["vp (Pa)"].rolling(30).mean()
+    return g
+
+df = df.groupby("ID", group_keys=False).apply(add_features)
+
 def scale_site():
     indiv_results = {}
 
     for site_id, subset in df.groupby("ID"):
         subset = subset.sort_values("DATE")
-        # subset["doy"] = subset["DATE"].dt.dayofyear
-        # subset["doy_sin"] = np.sin(2 * np.pi * subset["doy"] / 365.25)
-        # subset["doy_cos"] = np.cos(2 * np.pi * subset["doy"] / 365.25)
+        subset["doy"] = subset["DATE"].dt.dayofyear
+        subset["doy_sin"] = np.sin(2 * np.pi * subset["doy"] / 365.25)
+        subset["doy_cos"] = np.cos(2 * np.pi * subset["doy"] / 365.25)
+        # subset['dayofmonth'] = subset['DATE'].dt.day
+        # subset['dayofweek'] = subset['DATE'].dt.dayofweek
+        # subset['quarter'] = subset['DATE'].dt.quarter
+        # subset['month'] = subset['DATE'].dt.month
+        # subset['year'] = subset['DATE'].dt.year
 
-        X = subset.drop(columns=["DATE", "gwl"])
+        # subset["tavg (deg c)"] = (subset["tmax (deg c)"] + subset["tmin (deg c)"]) / 2
+        # subset = subset.drop(["tmax (deg c)", "tmin (deg c)"], axis=1)
+        # #
+        #
+        # es = 0.6108 * np.exp((17.27 * subset["tavg (deg c)"]) / (subset["tavg (deg c)"] + 237.3))
+        # ea = subset["vp (Pa)"] / 1000
+        # # vapor pressure deficit
+        # subset["vpd"] = es - ea
+        # subset = subset.drop(["vp (Pa)"], axis=1)
+
+        X = subset.drop(columns=["DATE", "gwl", "dayl (s)"])
         y = subset[["gwl"]]
-        static_cols = ["lat", "lon", "ID"] # ["doy", "doy_sin", "doy_cos"]
+        static_cols = ["lat", "lon", "ID", "doy", "doy_sin", "doy_cos"] #, "dayofmonth", "dayofweek", "quarter", "month", "year"]
         feat_cols = [c for c in X.columns if c not in static_cols]
 
         # X_train = X[:226499] # 60%
