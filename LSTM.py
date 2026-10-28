@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 from datetime import datetime
@@ -13,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
 from torch import nn
-from torch.optim import RMSprop
+from torch.optim import RMSprop, Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import numpy as np
@@ -52,44 +53,124 @@ def prepare_data():
     return X_train_wind, X_val, X_test, y_train_wind, y_val, y_test
 
 
+class CustomLearningRateScheduler:
+    """Linear warmup, optional hold, then cosine decay."""
+
+    def __init__(
+        self,
+        optimizer,
+        warmup_steps,
+        total_steps,
+        target_lr=0.001,
+        start_lr=0.0,
+        hold=0,
+    ):
+        self.optimizer = optimizer
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
+        self.target_lr = target_lr
+        self.start_lr = start_lr
+        self.hold = hold
+        self.global_step = 0
+
+    def lr_warmup_cosine_decay(self, global_step):
+        # Warmup: linearly increase from start_lr to target_lr
+        if global_step < self.warmup_steps:
+            if self.warmup_steps == 0:
+                return self.target_lr
+
+            return self.start_lr + (
+                self.target_lr - self.start_lr
+            ) * global_step / self.warmup_steps
+
+        # Hold the target learning rate
+        if global_step <= self.warmup_steps + self.hold:
+            return self.target_lr
+
+        # Keep the learning rate at target_lr after total_steps
+        if global_step >= self.total_steps:
+            return self.target_lr
+
+        # Cosine decay
+        decay_steps = self.total_steps - self.warmup_steps - self.hold
+
+        if decay_steps <= 0:
+            return self.target_lr
+
+        progress = (
+            global_step - self.warmup_steps - self.hold
+        ) / decay_steps
+
+        return 0.5 * self.target_lr * (
+            1 + math.cos(math.pi * progress)
+        )
+
+    def step(self):
+        new_lr = self.lr_warmup_cosine_decay(self.global_step)
+
+        for param_group in self.optimizer.param_groups:
+            param_group["lr"] = new_lr
+
+        print(
+            f"  Learning rate = {new_lr:.8f}"
+        )
+
+        self.global_step += 1
+
+# Source - https://stackoverflow.com/a/73704579
+# Posted by isle_of_gods, modified by community. See post 'Timeline' for change history
+# Retrieved 2026-10-28, License - CC BY-SA 4.0
+
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = float('inf')
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
+
+
 def nse_loss(y_true, y_pred):
   return torch.sum((y_pred - y_true) ** 2) / torch.sum((y_true - torch.mean(y_true)) ** 2)
 
 
 class LSTM(nn.Module):
-  def __init__(self, hidden_size=10, dropout_rate= 0.0):
-    """Initialize model
+  def __init__(self, hidden_size=3, dropout_rate= 0.3):
 
-    :param hidden_size: Number of hidden units/LSTM cells
-    :param dropout_rate: Dropout rate of the last fully connected
-        layer. Default 0.0
-    """
     super(LSTM, self).__init__()
     self.hidden_size = hidden_size
     self.dropout_rate = dropout_rate
 
-    # create required layer
     self.lstm = nn.LSTM(input_size=10, hidden_size=self.hidden_size,
                         num_layers=1, bias=True, batch_first=True)
-    self.dropout = nn.Dropout(p=self.dropout_rate)
-    self.fc = nn.Linear(in_features=self.hidden_size, out_features=1)
+    self.dropout1 = nn.Dropout(p=self.dropout_rate)
+    self.fc1 = nn.Linear(in_features=self.hidden_size, out_features=128)
+    self.relu1 = nn.ReLU()
+    self.dropout2 = nn.Dropout(p=self.dropout_rate)
+    self.fc2 = nn.Linear(in_features=128, out_features=256)
+    self.relu2 = nn.ReLU()
+    self.dropout3 = nn.Dropout(p=self.dropout_rate)
+    self.fc3 = nn.Linear(in_features=256, out_features=1)
 
 
   def forward(self, x: torch.Tensor):
-    """Forward pass through the Network.
-
-    :param x: Tensor of shape [batch size, seq length, num features]
-        containing the input data for the LSTM network.
-
-    :return: Tensor containing the network predictions
-    """
-    # if x.dim() == 2:
-    #   x = x.unsqueeze(1)
     # h_n: the final hidden state for each layer.
     _, (h_n, _) = self.lstm(x)
 
     # perform prediction only at the end of the input sequence
-    pred = self.fc(self.dropout(h_n[-1, :, :]))
+    out = self.relu1(self.fc1(self.dropout1(h_n[-1, :, :])))
+    out = self.relu2(self.fc2(self.dropout2(out)))
+    pred = self.fc3(self.dropout3(out))
     return pred
 
 
@@ -108,39 +189,29 @@ def kge(y_true, y_pred):
 HP_seeds = [171, 206, 380, 471, 570, 624, 643, 778, 808, 973]
 
 # Hyperparameters
-n_steps_in = 52
-HPi_lstm_size = 128
-HPi_static_size =  128
-HPi_comb_size =  256
-HPi_dropout =  0.3
 HPi_targetlr =  0.001
 HPi_epochs = 50
 HPi_batchsize = 512
 
-print("loading")
 x_train, x_val, x_test, y_train, y_val, y_test = prepare_data()
 dataset = utils.CustomDataset(x_train, y_train)
 train_loader = DataLoader(dataset, batch_size=HPi_batchsize, shuffle=False, num_workers=4, pin_memory=False)
 
-
-print("loaded")
 model1 = LSTM().cuda()
-print("model")
 
+early_stopper = EarlyStopper(patience=3, min_delta=10)
+optimizer = Adam(model1.parameters(), lr=HPi_targetlr, eps=0.0001)
+scheduler = CustomLearningRateScheduler(
+    optimizer=optimizer,
+    warmup_steps=3,
+    total_steps=50,
+    target_lr=0.001,
+    start_lr=0.0,
+    hold=5,
+)
 
-optimizer = RMSprop(model1.parameters(), lr=HPi_targetlr)
-# pth_out = "./results/results_s2_cor/"
-# for ii in range(len(HP_seeds)):
-#     HPi_seed = HP_seeds[ii]
-#
-#     # create folder for outputs
-#     pth_out_i = pth_out + '/run' + str(HPi_seed)
-#     os.mkdir(pth_out_i)
-#
-#     # set seed
-#     np.random.seed(HPi_seed)
-#     torch.cuda.manual_seed(HPi_seed)
 for ep in range(HPi_epochs):
+    scheduler.step()
     model1.train()
     avg_loss = 0.0
     for batch_idx, (X, y) in enumerate(train_loader):
@@ -149,11 +220,11 @@ for ep in range(HPi_epochs):
 
         optimizer.zero_grad()
         lstm = model1(X)
-        loss = nse_loss(y, lstm)
+        loss = nn.functional.mse_loss(lstm, y)
         loss.backward()
         optimizer.step()
         avg_loss += loss.item()
 
     total_loss = avg_loss / len(train_loader)
-    sys.stdout.write('\r epoch %2d %d/%d loss %.8f' %
-                     (ep, batch_idx + 1, len(train_loader), total_loss))
+    sys.stdout.write('\r epoch %2d loss %.8f' %
+                     (ep, total_loss))

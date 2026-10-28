@@ -13,12 +13,12 @@ from sklearn.metrics import make_scorer, r2_score
 
 
 def objective(trial):
-    # gb_learning_rate = trial.suggest_float("gb_learning_rate", 1e-3, 1e-1, log=True)
-    # gb_max_depth = trial.suggest_int("gb_max_depth", 3, 12)
-    # obj = HistGradientBoostingRegressor(
-    #     learning_rate=gb_learning_rate,
-    #     max_depth=gb_max_depth
-    # )
+    gb_learning_rate = trial.suggest_float("gb_learning_rate", 1e-3, 1e-1, log=True)
+    gb_max_depth = trial.suggest_int("gb_max_depth", 3, 12)
+    obj = HistGradientBoostingRegressor(
+        learning_rate=gb_learning_rate,
+        max_depth=gb_max_depth
+    )
 
     # rf_max_depth = trial.suggest_int("max_depth", 5, 50)
     # rf_n_estimators = trial.suggest_int("n_estimators", 5, 50)
@@ -26,21 +26,21 @@ def objective(trial):
     #     max_depth=rf_max_depth,
     #     n_estimators=rf_n_estimators,
     # )
-    param = {
-        "n_estimators": trial.suggest_int("n_estimators", 5, 100),
-        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-        "max_depth": trial.suggest_int("max_depth", 3, 10),
-        "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
-        "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-        "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
-        "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
-    }
-    obj = xgb(objective="reg:squarederror",
-              tree_method="hist",
-              random_state=42,
-              n_jobs=-1,
-              **param)
+    # param = {
+    #     "n_estimators": trial.suggest_int("n_estimators", 5, 100),
+    #     "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+    #     "max_depth": trial.suggest_int("max_depth", 3, 10),
+    #     "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+    #     "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+    #     "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+    #     "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+    #     "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+    # }
+    # obj = xgb(objective="reg:squarederror",
+    #           tree_method="hist",
+    #           random_state=42,
+    #           n_jobs=-1,
+    #           **param)
 
     df, _ = scale_site()
 
@@ -56,14 +56,14 @@ def objective(trial):
     y_val = df["y_val"][mask_val]
     y_test = df["y_test"][mask_test]
 
-    # obj.fit(X_train.to_numpy(), y_train.to_numpy().ravel())
-    # pred = obj.predict(X_test.to_numpy())
-    # score = nse(y_test.to_numpy().ravel(), pred.ravel())
+    obj.fit(X_train.to_numpy(), y_train.to_numpy().ravel())
+    pred = obj.predict(X_test.to_numpy())
+    score = r2_score(y_test.to_numpy().ravel(), pred.ravel())
 
-    cv = KFold(n_splits=5, shuffle=True, random_state=42)
-
-    score = cross_val_score(obj, X_train.to_numpy(), y_train.to_numpy().ravel(), cv=cv,
-                            scoring="r2").mean()
+    # cv = KFold(n_splits=5, shuffle=True, random_state=42)
+    #
+    # score = cross_val_score(obj, X_train.to_numpy(), y_train.to_numpy().ravel(), cv=cv,
+    #                         scoring="r2").mean()
 
     return score
 
