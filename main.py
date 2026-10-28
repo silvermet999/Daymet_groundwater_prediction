@@ -139,6 +139,10 @@ def minmaxsc(val, min_val, max_val):
     scaled = (val - min_val) / (max_val - min_val)
     return scaled
 
+def std_sc(x, u, s):
+    z = (x - u) / s
+    return z
+
 def add_features(g):
     g = g.sort_values("DATE").copy()
     g["tmean"] = (g["tmax (deg c)"] + g["tmin (deg c)"]) / 2
@@ -161,14 +165,14 @@ def scale_site():
 
     for site_id, subset in df.groupby("ID"):
         subset = subset.sort_values("DATE")
-        subset["doy"] = subset["DATE"].dt.dayofyear
-        subset["doy_sin"] = np.sin(2 * np.pi * subset["doy"] / 365.25)
-        subset["doy_cos"] = np.cos(2 * np.pi * subset["doy"] / 365.25)
+        # subset["doy"] = subset["DATE"].dt.dayofyear
+        # subset["doy_sin"] = np.sin(2 * np.pi * subset["doy"] / 365.25)
+        # subset["doy_cos"] = np.cos(2 * np.pi * subset["doy"] / 365.25)
         # subset['dayofmonth'] = subset['DATE'].dt.day
         # subset['dayofweek'] = subset['DATE'].dt.dayofweek
         # subset['quarter'] = subset['DATE'].dt.quarter
         # subset['month'] = subset['DATE'].dt.month
-        subset['year'] = subset['DATE'].dt.year
+        # subset['year'] = subset['DATE'].dt.year
 
         # subset["tavg (deg c)"] = (subset["tmax (deg c)"] + subset["tmin (deg c)"]) / 2
         # subset = subset.drop(["tmax (deg c)", "tmin (deg c)"], axis=1)
@@ -180,9 +184,9 @@ def scale_site():
         # subset["vpd"] = es - ea
         # subset = subset.drop(["vp (Pa)"], axis=1)
 
-        X = subset.drop(columns=["DATE", "gwl"])
+        X = subset.drop(columns=["gwl"])
         y = subset[["gwl"]]
-        static_cols = ["lat", "lon", "ID", "doy", "doy_sin", "doy_cos", "year"] #, "dayofmonth", "dayofweek", "quarter", "month", "year"]
+        static_cols = ["lat", "lon", "ID"] #, "dayofmonth", "dayofweek", "quarter", "month", "year"]
         feat_cols = [c for c in X.columns if c not in static_cols]
 
         # X_train = X[:226499] # 60%
@@ -203,21 +207,28 @@ def scale_site():
         mask_val = y_val["gwl"].notna().values
         mask_test = y_test["gwl"].notna().values
 
-        X_min_val, X_max_val = X_train[feat_cols].min(), X_train[feat_cols].max()
-
-        y_min_val, y_max_val = y_train.min(), y_train.max()
+        # X_min_val, X_max_val = X_train[feat_cols].min(), X_train[feat_cols].max()
+        #
+        # y_min_val, y_max_val = y_train.min(), y_train.max()
+        X_mean, X_std = X_train[feat_cols].mean(), X_train[feat_cols].std()
+        y_mean, y_std = y_train.mean(), y_train.std()
 
         def scale_X(Xs):
-            scaled = minmaxsc(Xs[feat_cols], X_min_val, X_max_val)
+            # scaled = minmaxsc(Xs[feat_cols], X_min_val, X_max_val)
+            scaled = std_sc(Xs[feat_cols], X_mean, X_std)
             return pd.concat([scaled, Xs[static_cols]], axis=1)[X.columns]
 
         X_train_sc = scale_X(X_train)
         X_val_sc = scale_X(X_val)
         X_test_sc = scale_X(X_test)
 
-        y_train_sc = minmaxsc(y_train, y_min_val, y_max_val)
-        y_val_sc = minmaxsc(y_val, y_min_val, y_max_val)
-        y_test_sc = minmaxsc(y_test, y_min_val, y_max_val)
+        y_train_sc = std_sc(y_train, y_mean, y_std)
+        y_val_sc = std_sc(y_val, y_mean, y_std)
+        y_test_sc = std_sc(y_test, y_mean, y_std)
+
+        # y_train_sc = minmaxsc(y_train, y_min_val, y_max_val)
+        # y_val_sc = minmaxsc(y_val, y_min_val, y_max_val)
+        # y_test_sc = minmaxsc(y_test, y_min_val, y_max_val)
 
         indiv_results[site_id] = {
             "X_train": X_train_sc, "X_val": X_val_sc, "X_test": X_test_sc,
@@ -239,7 +250,7 @@ def scale_site():
     concat_results = {"X_train": X_train_all, "X_val": X_val_all, "X_test": X_test_all,
                "y_train": y_train_all, "y_val": y_val_all, "y_test": y_test_all,
                "mask_train": mask_train_all, "mask_val": mask_val_all, "mask_test": mask_test_all,
-                "X_min": X_min_val, "X_max": X_max_val, "y_min": y_min_val, "y_max": y_max_val
+                # "X_min": X_min_val, "X_max": X_max_val, "y_min": y_min_val, "y_max": y_max_val
                }
     return concat_results, indiv_results
 

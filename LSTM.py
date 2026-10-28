@@ -9,7 +9,6 @@ import utils
 import main
 import matplotlib.pyplot as plt
 
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import RMSprop
@@ -70,7 +69,36 @@ def series_to_supervised(data, n_in=1, n_out=1):
 
 
 def prepare_data():
-  df , _ = main.scale_site()
+  # _, df = main.scale_site()
+  # ID_len = list()
+  # new_X_test, new_y_test = list(), list()
+  # X_test_stat = list()
+  # # df = df[2150001]
+  # for i in df:
+  #     df.reset_index(inplace=True)
+  #     df.rename(columns={"index": "DATE"}, inplace=True)
+  #     df["DATE"] = pd.to_datetime(df["DATE"])
+  #     df.set_index('DATE', inplace=True)
+  #
+  #     mask_train = df[i]["mask_train"]
+  #     mask_val = df[i]["mask_val"]
+  #     mask_test = df[i]["mask_test"]
+  #
+  #     X_train = df[i]["X_train"][mask_train].to_numpy()
+  #     X_val = df[i]["X_val"][mask_val].to_numpy()
+  #     X_test = df[i]["X_test"][mask_test].to_numpy()
+  #
+  #     y_train = df[i]["y_train"][mask_train].to_numpy()
+  #     y_val = df[i]["y_val"][mask_val].to_numpy()
+  #     y_test = df[i]["y_test"][mask_test].to_numpy()
+  #
+  #     ID_len.append(i, len(X_test)) # 70598, 80, 10
+  #     temp_test_ext = np.concatenate([X_val[-52:], X_test])
+  #     temp_X, temp_y = make_sequences(temp_test_ext, 52, 10)
+  #     new_X_test.append(temp_X); new_y_test.append(temp_y)
+  #     X_test_stat.append(np.repeat())
+
+  df, _ = main.scale_site()
   # df = df[2150001]
 
   mask_train = df["mask_train"]
@@ -88,6 +116,7 @@ def prepare_data():
   X_wind_train, y_wind_train = create_sliding_windows(X_train, y_train, seq_length=80)
   X_wind_val, y_wind_val = create_sliding_windows(X_val, y_val, seq_length=80)
   X_wind_test, y_wind_test = create_sliding_windows(X_test, y_test, seq_length=80)
+
 
   return X_wind_train, X_wind_val, X_wind_test, y_wind_train, y_wind_val, y_wind_test
 
@@ -111,7 +140,7 @@ class LSTM(nn.Module):
     self.dropout_rate = dropout_rate
 
     # create required layer
-    self.lstm = nn.LSTM(input_size=14, hidden_size=self.hidden_size,
+    self.lstm = nn.LSTM(input_size=10, hidden_size=self.hidden_size,
                         num_layers=1, bias=True, batch_first=True)
     self.dropout = nn.Dropout(p=self.dropout_rate)
     self.fc = nn.Linear(in_features=self.hidden_size, out_features=1)
