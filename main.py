@@ -160,8 +160,10 @@ def add_features(g):
 
 # df = df.groupby("ID", group_keys=False).apply(add_features)
 
+
 def scale_site():
     indiv_results = {}
+    df.set_index('DATE', inplace=True)
 
     for site_id, subset in df.groupby("ID"):
         subset = subset.sort_values("DATE")
@@ -189,14 +191,6 @@ def scale_site():
         static_cols = ["lat", "lon", "ID"] #, "dayofmonth", "dayofweek", "quarter", "month", "year"]
         feat_cols = [c for c in X.columns if c not in static_cols]
 
-        # X_train = X[:226499] # 60%
-        # X_val = X[226499:301998] # 20%
-        # X_test = X[301998:] # 20%
-        #
-        # y_train = y[:226499]
-        # y_val = y[226499:301998]
-        # y_test = y[301998:]
-        # AVOID NULL DFs (in val and test sets)
         n = len(subset)
         i_train = int(n * 0.6)
         i_val = int(n * (0.6 + 0.2))
@@ -207,14 +201,10 @@ def scale_site():
         mask_val = y_val["gwl"].notna().values
         mask_test = y_test["gwl"].notna().values
 
-        # X_min_val, X_max_val = X_train[feat_cols].min(), X_train[feat_cols].max()
-        #
-        # y_min_val, y_max_val = y_train.min(), y_train.max()
         X_mean, X_std = X_train[feat_cols].mean(), X_train[feat_cols].std()
         y_mean, y_std = y_train.mean(), y_train.std()
 
         def scale_X(Xs):
-            # scaled = minmaxsc(Xs[feat_cols], X_min_val, X_max_val)
             scaled = std_sc(Xs[feat_cols], X_mean, X_std)
             return pd.concat([scaled, Xs[static_cols]], axis=1)[X.columns]
 
@@ -225,10 +215,6 @@ def scale_site():
         y_train_sc = std_sc(y_train, y_mean, y_std)
         y_val_sc = std_sc(y_val, y_mean, y_std)
         y_test_sc = std_sc(y_test, y_mean, y_std)
-
-        # y_train_sc = minmaxsc(y_train, y_min_val, y_max_val)
-        # y_val_sc = minmaxsc(y_val, y_min_val, y_max_val)
-        # y_test_sc = minmaxsc(y_test, y_min_val, y_max_val)
 
         indiv_results[site_id] = {
             "X_train": X_train_sc, "X_val": X_val_sc, "X_test": X_test_sc,
