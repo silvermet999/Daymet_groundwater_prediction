@@ -15,25 +15,38 @@ from torch import nn
 from torch.optim import RMSprop
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
+import numpy as np
 
+def create_sliding_windows(X, y, seq_length):
+    X_windows = np.array([
+        X[i:i + seq_length]
+        for i in range(len(X) - seq_length)
+    ])
 
-def get_series_for_outlier_detection(data_scaled, mask_raw, column_name):
-  series = data_scaled[column_name].to_numpy()
-  mask = mask_raw[column_name].to_numpy()
-  return series, mask
+    y_windows = np.array([
+        y[i + seq_length]
+        for i in range(len(y) - seq_length)
+    ])
 
+    return X_windows, y_windows
 
-def mad_bounds(series, mask=None, threshold=3.5):
-  s = series[mask.astype(bool)] if mask is not None else series
-  median = np.median(s)
-  MAD = np.median(np.abs(s - median))
-  if MAD == 0:
-    MAD = 1e-9
-  modified_z = 0.6745 * (series - median) / MAD
-  lower = median - (threshold / 0.6745) * MAD
-  upper = median + (threshold / 0.6745) * MAD
-  is_outlier = np.abs(modified_z) > threshold
-  return is_outlier, lower, upper
+def make_sequences(data, n_steps_in, n_input):
+    #make the data sequential
+    #modified after Jason Brownlee and machinelearningmastery.com
+    X, Y = list(), list()
+    # step over the entire history one time step at a time
+    for i in range(len(data)):
+        # find the end of this pattern
+        end_idx = i + n_steps_in
+        # check if we are beyond the dataset
+        if end_idx >= len(data):
+            break
+        # gather input and output parts of the pattern
+        seq_x = data[i:end_idx, :n_input]
+        seq_y = data[end_idx, n_input:]
+        X.append(seq_x)
+        Y.append(seq_y)
+    return np.array(X), np.array(Y)
 
 def series_to_supervised(data, n_in=1, n_out=1):
   n_vars = 1 if type(data) is list else data.shape[1]
@@ -56,8 +69,9 @@ def series_to_supervised(data, n_in=1, n_out=1):
   return pd.DataFrame(agg.astype('float32'))
 
 
-def prepare_data(): #(hours_of_history, hours_to_predict):
-  df, _ = main.scale_site()
+def prepare_data():
+  df , _ = main.scale_site()
+  # df = df[2150001]
 
   mask_train = df["mask_train"]
   mask_val = df["mask_val"]
@@ -71,87 +85,54 @@ def prepare_data(): #(hours_of_history, hours_to_predict):
   y_val = df["y_val"][mask_val].to_numpy()
   y_test = df["y_test"][mask_test].to_numpy()
 
-  return X_train, X_val, X_test, y_train, y_val, y_test
+  X_wind_train, y_wind_train = create_sliding_windows(X_train, y_train, seq_length=80)
+  X_wind_val, y_wind_val = create_sliding_windows(X_val, y_val, seq_length=80)
+  X_wind_test, y_wind_test = create_sliding_windows(X_test, y_test, seq_length=80)
 
-  # data_sequence = series_to_supervised(X_train, hours_of_history, hours_to_predict, dropnan=False)
-  # mask_sequence = series_to_supervised(mask_train, hours_of_history, hours_to_predict, dropnan=False)
+  return X_wind_train, X_wind_val, X_wind_test, y_wind_train, y_wind_val, y_wind_test
 
-  # train_x_rainfall = X_train[:, 0::3].reshape(-1, hours_of_history + hours_to_predict, 1)
-  # train_discharge = X_train[:, 2::3].reshape(-1, hours_of_history + hours_to_predict, 1)
-  # train_x_discharge = train_discharge[:, :hours_of_history, :]
-  # train_y = train_discharge[:, hours_of_history:, :]
-  # train_x_et = X_train[:, 3 * hours_of_history + 1].reshape(-1, 1)  # the current hour et
-  #
-  # valid_x_rainfall = data_valid[:, 0::3].reshape(-1, hours_of_history + hours_to_predict, 1)
-  # valid_discharge = data_valid[:, 2::3].reshape(-1, hours_of_history + hours_to_predict, 1)
-  # valid_x_discharge = valid_discharge[:, :hours_of_history, :]
-  # valid_y = valid_discharge[:, hours_of_history:, :]
-  # valid_x_et = data_valid[:, 3 * hours_of_history + 1].reshape(-1, 1)  # the current hour et
-  #
-  # test_x_rainfall = data_test[:, 0::3].reshape(-1, hours_of_history + hours_to_predict, 1)
-  # test_discharge = data_test[:, 2::3].reshape(-1, hours_of_history + hours_to_predict, 1)
-  # test_x_discharge = test_discharge[:, :hours_of_history, :]
-  # test_y = test_discharge[:, hours_of_history:, :]
-  # test_x_et = data_test[:, 3 * hours_of_history + 1].reshape(-1, 1)  # the current hour et
-  #
-  # return [train_x_et, train_x_discharge, train_x_rainfall], train_y, [valid_x_et, valid_x_discharge,
-  #                                                                     valid_x_rainfall], valid_y, [test_x_et,
-  #                                                                                                  test_x_discharge,
-  #                                                                                                  test_x_rainfall], test_y, q_max, q_min
-  # )
+  #return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-# define custome loss function (you can use the simple 'mse' as well)
-def nse_loss(y_true, y_pred, eps=1e-6):
-  denom = torch.sum((y_true - torch.mean(y_true)) ** 2)
-  denom = torch.clamp(denom, min=eps)
-  return torch.sum((y_pred - y_true) ** 2) / denom
-
-def robust_recon_loss(y_true, y_pred, mask=None, delta=1.0):
-  if mask is not None:
-    y_true = y_true[mask]
-    y_pred = y_pred[mask]
-  return nn.functional.huber_loss(y_pred, y_true, delta=delta)
-
-class EDLSTM(nn.Module):
-  def __init__(self,
-               n_vars,
-               encoder_hidden=128,
-               decoder_hidden=256,
-               dense_dims=(256, 64),
-               dropout_p=0.2):
-    super().__init__()
-    self.n_vars = n_vars
-
-    self.encoder_lstm = nn.LSTM(input_size=n_vars, hidden_size=encoder_hidden, batch_first=True)
-    self.decoder_lstm = nn.LSTM(input_size=encoder_hidden, hidden_size=decoder_hidden, batch_first=True)
-
-    dense_layers = []
-    in_dim = decoder_hidden
-    for dim in dense_dims:
-      dense_layers.append(nn.Linear(in_dim, dim))
-      dense_layers.append(nn.ReLU())
-      dense_layers.append(nn.Dropout(dropout_p))
-      in_dim = dim
-    self.dense_stack = nn.Sequential(*dense_layers)
-
-    self.output_layer = nn.Linear(in_dim, n_vars)
-    self.output_activation = nn.Sigmoid()
+def nse_loss(y_true, y_pred):
+  return torch.sum((y_pred - y_true) ** 2) / torch.sum((y_true - torch.mean(y_true)) ** 2)
 
 
-  def forward(self, x):
-    _, (h, _) = self.encoder_lstm(x)
-    # h_last = h[-1]
-    # print("t", h_last.shape)
-    #
-    # decoder_input = h_last.unsqueeze(1)
-    # print("fo", decoder_input.shape)
+class LSTM(nn.Module):
+  def __init__(self, hidden_size=10, dropout_rate= 0.0):
+    """Initialize model
 
-    decoder_out, _ = self.decoder_lstm(h)
+    :param hidden_size: Number of hidden units/LSTM cells
+    :param dropout_rate: Dropout rate of the last fully connected
+        layer. Default 0.0
+    """
+    super(LSTM, self).__init__()
+    self.hidden_size = hidden_size
+    self.dropout_rate = dropout_rate
 
-    x = self.dense_stack(decoder_out)
-    x = self.output_activation(self.output_layer(x))
-    return x #.squeeze(1)
+    # create required layer
+    self.lstm = nn.LSTM(input_size=14, hidden_size=self.hidden_size,
+                        num_layers=1, bias=True, batch_first=True)
+    self.dropout = nn.Dropout(p=self.dropout_rate)
+    self.fc = nn.Linear(in_features=self.hidden_size, out_features=1)
+
+
+  def forward(self, x: torch.Tensor):
+    """Forward pass through the Network.
+
+    :param x: Tensor of shape [batch size, seq length, num features]
+        containing the input data for the LSTM network.
+
+    :return: Tensor containing the network predictions
+    """
+    # if x.dim() == 2:
+    #   x = x.unsqueeze(1)
+    # h_n: the final hidden state for each layer.
+    _, (h_n, _) = self.lstm(x)
+
+    # perform prediction only at the end of the input sequence
+    pred = self.fc(self.dropout(h_n[-1, :, :]))
+    return pred
 
 
 
@@ -167,7 +148,7 @@ def kge(y_true, y_pred):
 
 
 batch_size = 64
-lr = 0.0005
+lr = 0.01
 epochs = 500
 
 # load data
@@ -184,11 +165,11 @@ test_loader = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, num
 
 
 print("loaded")
-model1 = EDLSTM(n_vars= 32).cuda()
+model1 = LSTM().cuda()
 print("model")
 
 
-optimizer = utils.SVRG(model1.parameters(), lr=lr)
+optimizer = RMSprop(model1.parameters(), lr=lr)
 
 
 def training():
@@ -196,19 +177,18 @@ def training():
   avg_loss=0.0
   for batch_idx, (X, y) in enumerate(train_loader):
       X = X.to(torch.float).cuda()
-      y = y.to(torch.bool).cuda()
+      y = y.to(torch.float).cuda()
 
       optimizer.zero_grad()
-      recon_batch = model1(X)
-      loss = nse_loss(X, recon_batch)
+      lstm = model1(X)
+      loss = nse_loss(y, lstm)
       loss.backward()
-      torch.nn.utils.clip_grad_norm_(model1.parameters(), max_norm=5.0)
       optimizer.step()
       avg_loss += loss.item()
 
   total_loss = avg_loss / len(train_loader)
-  sys.stdout.write('\r epoch %2d %d/%d loss %.2f' %
-                       (ep, batch_idx + 1, len(train_loader), total_loss))
+  sys.stdout.write('\r epoch %2d %d/%d loss %.8f' %
+                      (ep, batch_idx + 1, len(train_loader), total_loss))
 
 
 # def validation():
@@ -227,62 +207,11 @@ def training():
 #
 #   total_loss = avg_loss / len(val_loader)
 #   return total_loss
-#
-# def stitch_overlapping_windows(window_outputs, n_rows, window_size, n_vars):
-#   n_windows = window_outputs.shape[0]
-#   assert n_windows == n_rows - window_size + 1
-#
-#   sum_recon = np.zeros((n_rows, n_vars), dtype='float32')
-#   count = np.zeros((n_rows, 1), dtype='float32')
-#
-#   for i in range(n_windows):
-#       sum_recon[i:i + window_size] += window_outputs[i]
-#       count[i:i + window_size] += 1
-#
-#   # rows at the very start/end are covered by fewer windows; count
-#   # handles that correctly via the division below
-#   return sum_recon / count
-#
-#
-# @torch.no_grad()
-# def impute_with_model(model_name, window_size=2, batch_size=256):
-#
-#     model1.load_state_dict(torch.load(model_name))
-#     model = model1.cuda()
-#     model.eval()
-#
-#     n_rows, n_vars = data_scaled.shape
-#
-#     data_windows = make_windows(data_scaled, window_size)
-#
-#     n_windows = data_windows.shape[0]
-#     all_recon = np.zeros_like(data_windows)
-#
-#     for start in range(0, n_windows, batch_size):
-#         end = min(start + batch_size, n_windows)
-#         batch = torch.tensor(data_windows[start:end], dtype=torch.float).cuda()
-#         recon = model(batch)  # (batch, window_size, n_vars)
-#         all_recon[start:end] = recon.cpu().numpy()
-#
-#     # Stitch overlapping window reconstructions into one continuous series
-#     recon_full = stitch_overlapping_windows(all_recon, n_rows, window_size, n_vars)
-#
-#     # Original mask, aligned row-for-row with data_scaled/recon_full
-#
-#     # Keep real observed values; substitute reconstruction only where missing
-#     imputed_scaled = np.where(mask_raw.astype(bool), data_scaled, recon_full)
-#
-#     imputed_real = scaler.inverse_transform(imputed_scaled)
-#
-#     imputed_df = pd.DataFrame(imputed_real, columns=None)  # set columns=your_feature_columns
-#     return imputed_df
 
-# imputed_df = impute_with_model("model0.14691463726758958.pt")
-# imputed_df.to_csv('imputed_output.csv', index=False)
 
 for ep in range(epochs):
   training_loss = training()
   # if ep % 20 == 18:
   #   val_loss = validation()
   #   print("VAL LOSS =====> ", val_loss)
-  torch.save(model1.state_dict(), f"model{training_loss}.pt")
+  # torch.save(model1.state_dict(), f"model{training_loss}.pt")

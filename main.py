@@ -67,7 +67,7 @@ def correlation_heatmap():
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
     sns.heatmap(corr, annot=True, cmap=cmap, vmax=.3, center=0,
                 square=True, linewidths=.5, cbar_kws={"shrink": .5})
-    plt.savefig("corr.png")
+    plt.savefig("corr-after.png")
 
 def feature_plot():
     for site_id in df["ID"].unique():
@@ -150,11 +150,11 @@ def add_features(g):
         g[f"srad_avg_{w}"] = g["srad (W/m^2)"].rolling(w).mean()
 
     g["swe_max_30"] = g["swe (kg/m^2)"].rolling(30).max()
-    g["swe_diff_7"] = g["swe (kg/m^2)"].diff(7)   # snowmelt or accumulation
+    g["swe_diff_7"] = g["swe (kg/m^2)"].diff(7)
     g["vp_avg_30"] = g["vp (Pa)"].rolling(30).mean()
     return g
 
-df = df.groupby("ID", group_keys=False).apply(add_features)
+# df = df.groupby("ID", group_keys=False).apply(add_features)
 
 def scale_site():
     indiv_results = {}
@@ -168,7 +168,7 @@ def scale_site():
         # subset['dayofweek'] = subset['DATE'].dt.dayofweek
         # subset['quarter'] = subset['DATE'].dt.quarter
         # subset['month'] = subset['DATE'].dt.month
-        # subset['year'] = subset['DATE'].dt.year
+        subset['year'] = subset['DATE'].dt.year
 
         # subset["tavg (deg c)"] = (subset["tmax (deg c)"] + subset["tmin (deg c)"]) / 2
         # subset = subset.drop(["tmax (deg c)", "tmin (deg c)"], axis=1)
@@ -180,9 +180,9 @@ def scale_site():
         # subset["vpd"] = es - ea
         # subset = subset.drop(["vp (Pa)"], axis=1)
 
-        X = subset.drop(columns=["DATE", "gwl", "dayl (s)"])
+        X = subset.drop(columns=["DATE", "gwl"])
         y = subset[["gwl"]]
-        static_cols = ["lat", "lon", "ID", "doy", "doy_sin", "doy_cos"] #, "dayofmonth", "dayofweek", "quarter", "month", "year"]
+        static_cols = ["lat", "lon", "ID", "doy", "doy_sin", "doy_cos", "year"] #, "dayofmonth", "dayofweek", "quarter", "month", "year"]
         feat_cols = [c for c in X.columns if c not in static_cols]
 
         # X_train = X[:226499] # 60%
@@ -204,11 +204,9 @@ def scale_site():
         mask_test = y_test["gwl"].notna().values
 
         X_min_val, X_max_val = X_train[feat_cols].min(), X_train[feat_cols].max()
-        # X_min_val, X_max_val = X_min_val.to_dict(), X_max_val.to_dict()
 
         y_min_val, y_max_val = y_train.min(), y_train.max()
-        # y_min_val, y_max_val = y_min_val.to_dict(), y_max_val.to_dict()
-        #
+
         def scale_X(Xs):
             scaled = minmaxsc(Xs[feat_cols], X_min_val, X_max_val)
             return pd.concat([scaled, Xs[static_cols]], axis=1)[X.columns]
@@ -224,7 +222,7 @@ def scale_site():
         indiv_results[site_id] = {
             "X_train": X_train_sc, "X_val": X_val_sc, "X_test": X_test_sc,
             "y_train": y_train_sc, "y_val": y_val_sc, "y_test": y_test_sc,
-            "mask_train": mask_train, "mask_val": mask_val, "mask_test": mask_test,
+            "mask_train": mask_train, "mask_val": mask_val, "mask_test": mask_test
         }
     X_train_all = pd.concat([d["X_train"] for d in indiv_results.values()])
     y_train_all = pd.concat([d["y_train"] for d in indiv_results.values()])
