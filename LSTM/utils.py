@@ -1,5 +1,10 @@
+import gc
+
+import numpy as np
 from tensorflow.keras.utils import Sequence
 from keras.callbacks import Callback
+import tensorflow as tf
+import tensorflow.keras.backend as K
 
 
 class CustomLearningRateScheduler(tf.keras.callbacks.Callback):
@@ -52,9 +57,8 @@ class ClearMemory(tf.keras.callbacks.Callback):
         gc.collect()
 
 class DataGenerator(Sequence):
-    def __init__(self, X_dyn, X_stat, y, batch_size, shuffle=True):
-        self.X_dyn = X_dyn
-        self.X_stat = X_stat
+    def __init__(self, X, y, batch_size, shuffle=True):
+        self.X = X
         self.y = y
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -69,11 +73,10 @@ class DataGenerator(Sequence):
         batch_indices = self.indices[index * self.batch_size:(index + 1) * self.batch_size]
 
         # Generate data
-        X_dyn_batch = self.X_dyn[batch_indices]
-        X_stat_batch = self.X_stat[batch_indices]
+        X_batch = self.X[batch_indices]
         y_batch = self.y[batch_indices]
 
-        return (X_dyn_batch, X_stat_batch), y_batch
+        return X_batch, y_batch
 
     def on_epoch_end(self):
         if self.shuffle:
@@ -86,3 +89,4 @@ class BatchProgressCallback(Callback):
 
     def on_epoch_begin(self, epoch, logs=None):
         print(f"\nStarting Epoch {epoch + 1}...\n")
+

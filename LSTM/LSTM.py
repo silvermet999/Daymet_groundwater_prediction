@@ -1,14 +1,17 @@
+import gc
 import math
+import os
 import sys
+from datetime import datetime
 
-import torch
-from torch.utils.data import DataLoader
+import pandas as pd
+from scipy.stats import stats
+
+import main
+import tensorflow as tf
+from keras.callbacks import EarlyStopping
 
 import utils
-import main
-
-from torch import nn
-from torch.optim import Adam
 
 import numpy as np
 
@@ -26,200 +29,120 @@ def make_sequences(X, y, seq_length):
     return X_windows, y_windows
 
 def prepare_data():
-    df, _ = main.scale_site()
+    _, df = main.scale_site()
     # df = df[2150001]
+    sequences = {}
+    for i in df:
+        mask_train = df[i]["mask_train"]
+        mask_val = df[i]["mask_val"]
+        mask_test = df[i]["mask_test"]
 
-    mask_train = df["mask_train"]
-    mask_val = df["mask_val"]
-    mask_test = df["mask_test"]
+        X_train = df[i]["X_train"][mask_train].to_numpy()
+        X_val = df[i]["X_val"][mask_val].to_numpy()
+        X_test = df[i]["X_test"][mask_test].to_numpy()
 
-    X_train = df["X_train"][mask_train].to_numpy()
-    X_val = df["X_val"][mask_val].to_numpy()
-    X_test = df["X_test"][mask_test].to_numpy()
+        y_train = df[i]["y_train"][mask_train].to_numpy()
+        y_val = df[i]["y_val"][mask_val].to_numpy()
+        y_test = df[i]["y_test"][mask_test].to_numpy()
 
-    y_train = df["y_train"][mask_train].to_numpy()
-    y_val = df["y_val"][mask_val].to_numpy()
-    y_test = df["y_test"][mask_test].to_numpy()
+        X_train_wind, y_train_wind = make_sequences(X_train, y_train, 80)
+        X_val_wind, y_val_wind = make_sequences(X_val, y_val, 80)
+        X_test_wind, y_test_wind = make_sequences(X_test, y_test, 80)
 
-    X_train_wind, y_train_wind = make_sequences(X_train, y_train, 80)
-    X_val_wind, y_val_wind = make_sequences(X_val, y_val, 80)
-    X_test_wind, y_test_wind = make_sequences(X_test, y_test, 80)
+        sequences[i] = {
+            "X_train": X_train_wind,
+            "X_val": X_val_wind,
+            "X_test": X_test_wind,
 
-    return X_train_wind, X_val_wind, X_test_wind, y_train_wind, y_val_wind, y_test_wind
+            "y_train": y_train_wind,
+            "y_val": y_val_wind,
+            "y_test": y_test_wind
+        }
 
-
-class CustomLearningRateScheduler:
-    """Linear warmup, optional hold, then cosine decay."""
-
-    def __init__(
-        self,
-        optimizer,
-        warmup_steps,
-        total_steps,
-        target_lr=0.001,
-        start_lr=0.0,
-        hold=0,
-    ):
-        self.optimizer = optimizer
-        self.warmup_steps = warmup_steps
-        self.total_steps = total_steps
-        self.target_lr = target_lr
-        self.start_lr = start_lr
-        self.hold = hold
-        self.global_step = 0
-
-    def lr_warmup_cosine_decay(self, global_step):
-        # Warmup: linearly increase from start_lr to target_lr
-        if global_step < self.warmup_steps:
-            if self.warmup_steps == 0:
-                return self.target_lr
-
-            return self.start_lr + (
-                self.target_lr - self.start_lr
-            ) * global_step / self.warmup_steps
-
-        # Hold the target learning rate
-        if global_step <= self.warmup_steps + self.hold:
-            return self.target_lr
-
-        # Keep the learning rate at target_lr after total_steps
-        if global_step >= self.total_steps:
-            return self.target_lr
-
-        # Cosine decay
-        decay_steps = self.total_steps - self.warmup_steps - self.hold
-
-        if decay_steps <= 0:
-            return self.target_lr
-
-        progress = (
-            global_step - self.warmup_steps - self.hold
-        ) / decay_steps
-
-        return 0.5 * self.target_lr * (
-            1 + math.cos(math.pi * progress)
-        )
-
-    def step(self):
-        new_lr = self.lr_warmup_cosine_decay(self.global_step)
-
-        for param_group in self.optimizer.param_groups:
-            param_group["lr"] = new_lr
-
-        print(
-            f"  Learning rate = {new_lr:.8f}"
-        )
-
-        self.global_step += 1
-
-# Source - https://stackoverflow.com/a/73704579
-# Posted by isle_of_gods, modified by community. See post 'Timeline' for change history
-# Retrieved 2026-10-28, License - CC BY-SA 4.0
-
-class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.min_validation_loss = float('inf')
-
-    def early_stop(self, validation_loss):
-        if validation_loss < self.min_validation_loss:
-            self.min_validation_loss = validation_loss
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta):
-            self.counter += 1
-            if self.counter >= self.patience:
-                return True
-        return False
+    return sequences, df
 
 
-
-def nse_loss(y_true, y_pred):
-  return torch.sum((y_pred - y_true) ** 2) / torch.sum((y_true - torch.mean(y_true)) ** 2)
-
-
-class LSTM(nn.Module):
-  def __init__(self, hidden_size=3, dropout_rate= 0.3):
-
-    super(LSTM, self).__init__()
-    self.hidden_size = hidden_size
-    self.dropout_rate = dropout_rate
-
-    self.lstm = nn.LSTM(input_size=10, hidden_size=self.hidden_size,
-                        num_layers=1, bias=True, batch_first=True)
-    self.dropout1 = nn.Dropout(p=self.dropout_rate)
-    self.fc1 = nn.Linear(in_features=self.hidden_size, out_features=128)
-    self.relu1 = nn.ReLU()
-    self.dropout2 = nn.Dropout(p=self.dropout_rate)
-    self.fc2 = nn.Linear(in_features=128, out_features=256)
-    self.relu2 = nn.ReLU()
-    self.dropout3 = nn.Dropout(p=self.dropout_rate)
-    self.fc3 = nn.Linear(in_features=256, out_features=1)
-
-
-  def forward(self, x: torch.Tensor):
-    # h_n: the final hidden state for each layer.
-    _, (h_n, _) = self.lstm(x)
-
-    # perform prediction only at the end of the input sequence
-    out = self.relu1(self.fc1(self.dropout1(h_n[-1, :, :])))
-    out = self.relu2(self.fc2(self.dropout2(out)))
-    pred = self.fc3(self.dropout3(out))
-    return pred
-
-
-
-# identify KGE, NSE for evaluation
-def nse(y_true, y_pred):
-  return 1-np.sum((y_pred-y_true)**2)/np.sum((y_true-np.mean(y_true))**2)
-
-def kge(y_true, y_pred):
-  kge_r = np.corrcoef(y_true,y_pred)[1][0]
-  kge_a = np.std(y_pred)/np.std(y_true)
-  kge_b = np.mean(y_pred)/np.mean(y_true)
-  return 1-np.sqrt((kge_r-1)**2+(kge_a-1)**2+(kge_b-1)**2)
 
 
 HP_seeds = [171, 206, 380, 471, 570, 624, 643, 778, 808, 973]
 
 # Hyperparameters
-HPi_targetlr =  0.001
-HPi_epochs = 50
+n_steps_in = 80
+HPi_lstm_size = 128
+HPi_static_size = 128
+HPi_comb_size = 256
+HPi_dropout = 0.3
+HPi_targetlr = 0.001
+HPi_epochs = 20
 HPi_batchsize = 512
 
-x_train, x_val, x_test, y_train, y_val, y_test = prepare_data()
-dataset = utils.CustomDataset(x_train, y_train)
-train_loader = DataLoader(dataset, batch_size=HPi_batchsize, shuffle=False, num_workers=4, pin_memory=False)
+sequences, df = prepare_data()
 
-model1 = LSTM().cuda()
+# ii=0
+for ii in range(len(HP_seeds)):
 
-early_stopper = EarlyStopper(patience=3, min_delta=10)
-optimizer = Adam(model1.parameters(), lr=HPi_targetlr, eps=0.0001)
-scheduler = CustomLearningRateScheduler(
-    optimizer=optimizer,
-    warmup_steps=3,
-    total_steps=50,
-    target_lr=0.001,
-    start_lr=0.0,
-    hold=5,
-)
+    HPi_seed = HP_seeds[ii]
 
-for ep in range(HPi_epochs):
-    scheduler.step()
-    model1.train()
-    avg_loss = 0.0
-    for batch_idx, (X, y) in enumerate(train_loader):
-        X = X.to(torch.float).cuda()
-        y = y.to(torch.float).cuda()
+    # take time
+    now1 = datetime.now()
 
-        optimizer.zero_grad()
-        lstm = model1(X)
-        loss = nn.functional.mse_loss(lstm, y)
-        loss.backward()
-        optimizer.step()
-        avg_loss += loss.item()
+    # set seed
+    np.random.seed(HPi_seed)
+    tf.random.set_seed(HPi_seed)
 
-    total_loss = avg_loss / len(train_loader)
-    sys.stdout.write('\r epoch %2d loss %.8f' %
-                     (ep, total_loss))
+    # Callbacks
+    model_es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=5, restore_best_weights=True)
+    model_mc = tf.keras.callbacks.ModelCheckpoint(filepath="results" + '/model.keras',
+                                                  save_best_only=True)
+
+    warmup_steps = 3  # Number of warmup steps
+    total_steps = 20  # Total training steps
+    target_lr = 0.001  # Peak learning rate
+    lr_callback = utils.CustomLearningRateScheduler(warmup_steps, total_steps, target_lr=target_lr)
+
+
+    for i in df:
+        X_train = sequences[i]["X_train"]
+        X_val = sequences[i]["X_val"]
+        X_test = sequences[i]["X_test"]
+        y_train = sequences[i]["y_train"]
+        y_val = sequences[i]["y_val"]
+        y_test = sequences[i]["y_test"]
+        # Input layers for dynamic and static model strands
+        model_in = tf.keras.Input(shape=(n_steps_in, X_train.shape[2]))
+
+        # Dynamic model strand
+        model = tf.keras.layers.LSTM(HPi_lstm_size)(model_in)
+        model = tf.keras.layers.Dropout(HPi_dropout)(model)
+
+        model = tf.keras.layers.Dense(HPi_comb_size, activation='relu')(model)
+        model = tf.keras.layers.Dropout(HPi_dropout)(model)
+
+        # Define output layer for predictions
+        model_output = tf.keras.layers.Dense(units=1, activation='linear', dtype=tf.float32)(model)
+
+        model = tf.keras.Model(inputs=model_in, outputs=model_output)
+
+        # Compile model with appropriate loss function and optimizer
+        optimizer = tf.keras.optimizers.Adam(epsilon=0.0001)
+        model.compile(loss='mse', optimizer=optimizer)
+
+        # Use fit with generators
+        model_history = model.fit(X_train, y_train,
+                                  validation_data=(X_val, y_val),
+                                  epochs=HPi_epochs, verbose=1,
+                                  callbacks=[model_es, model_mc, lr_callback,
+                                             utils.BatchProgressCallback(),
+                                             utils.ClearMemory()])
+
+        # take time
+        now2 = datetime.now()
+        timetaken = round((now2 - now1).total_seconds()) / 60
+        print('\n timetaken = ' + str(timetaken) + '\n')
+
+        #
+        # # predict - with saved model checkpoint
+        gc.collect()
+        tf.keras.backend.clear_session()
+        loaded_model = tf.keras.models.load_model("results" + '/model.keras')
+        sim_n = loaded_model.predict(X_test, batch_size=64)
