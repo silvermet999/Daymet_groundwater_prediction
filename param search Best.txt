@@ -1,1 +1,0 @@
-{learning_rate': 0.09648622384311142, 'max_depth': 10}

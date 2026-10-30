@@ -8,7 +8,7 @@ gw_long = gwl.melt(
             value_name='gwl'
         )
 
-wells = pd.read_csv("src/70ids.csv")
+wells = pd.read_csv("../src/70ids.csv")
 gw_long["ID"] = gw_long["ID"].astype(str)
 wells["ID_sel"] = wells["ID_sel"].astype(str)
 gw_long["ID"] = gw_long["ID"].map(lambda x: x.lstrip("0"))

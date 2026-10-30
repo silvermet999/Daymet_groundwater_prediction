@@ -7,3 +7,4 @@ statsmodels~=0.15.0
 requests~=2.34.2
 optuna~=5.0.0
 xgboost~=3.2.0
+torch~=2.14.1+cu126

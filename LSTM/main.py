@@ -135,47 +135,23 @@ df["DATE"] = pd.to_datetime(df["DATE"])
 # if args.vif:
 #     vif_funct()
 
-def minmaxsc(val, min_val, max_val):
-    scaled = (val - min_val) / (max_val - min_val)
-    return scaled
-
 def std_sc(x, u, s):
     z = (x - u) / s
     return z
 
-def add_features(g):
-    g = g.sort_values("DATE").copy()
-    g["tmean"] = (g["tmax (deg c)"] + g["tmin (deg c)"]) / 2
-    g["trange"] = g["tmax (deg c)"] - g["tmin (deg c)"]
-
-    for w in (7, 30, 90, 180, 365):
-        g[f"prcp_sum_{w}"] = g["prcp (mm/day)"].rolling(w).sum()
-        g[f"tmean_avg_{w}"] = g["tmean"].rolling(w).mean()
-        g[f"srad_avg_{w}"] = g["srad (W/m^2)"].rolling(w).mean()
-
-    g["swe_max_30"] = g["swe (kg/m^2)"].rolling(30).max()
-    g["swe_diff_7"] = g["swe (kg/m^2)"].diff(7)
-    g["vp_avg_30"] = g["vp (Pa)"].rolling(30).mean()
-    return g
-
-df = df.groupby("ID", group_keys=False).apply(add_features)
-
 
 def scale_site():
     indiv_results = {}
-    # df.set_index('DATE', inplace=True)
+    df.set_index('DATE', inplace=True)
 
     for site_id, subset in df.groupby("ID"):
         subset = subset.sort_values("DATE")
-        subset["doy"] = subset["DATE"].dt.dayofyear
-        subset["doy_sin"] = np.sin(2 * np.pi * subset["doy"] / 365.25)
-        subset["doy_cos"] = np.cos(2 * np.pi * subset["doy"] / 365.25)
-        subset['year'] = subset['DATE'].dt.year
 
 
-        X = subset.drop(columns=["DATE", "gwl"])
+        X = subset.drop(columns=["gwl"])
         y = subset[["gwl"]]
-        static_cols = ["lat", "lon", "ID", "doy", "doy_sin", "doy_cos", "year"]
+        # Do not scale the static cols
+        static_cols = ["lat", "lon", "ID"]
         feat_cols = [c for c in X.columns if c not in static_cols]
 
         n = len(subset)
@@ -188,26 +164,20 @@ def scale_site():
         mask_val = y_val["gwl"].notna().values
         mask_test = y_test["gwl"].notna().values
 
-        # X_mean, X_std = X_train[feat_cols].mean(), X_train[feat_cols].std()
-        # y_mean, y_std = y_train.mean(), y_train.std()
-        X_min, X_max = X_train[feat_cols].min(), X_train[feat_cols].max()
-        y_min, y_max = y_train.min(), y_train.max()
+        X_mean, X_std = X_train[feat_cols].mean(), X_train[feat_cols].std()
+        y_mean, y_std = y_train.mean(), y_train.std()
 
         def scale_X(Xs):
-            scaled = minmaxsc(Xs[feat_cols], X_min, X_max)
-            # scaled = std_sc(Xs[feat_cols], X_mean, X_std)
+            scaled = std_sc(Xs[feat_cols], X_mean, X_std)
             return pd.concat([scaled, Xs[static_cols]], axis=1)[X.columns]
 
         X_train_sc = scale_X(X_train)
         X_val_sc = scale_X(X_val)
         X_test_sc = scale_X(X_test)
 
-        # y_train_sc = std_sc(y_train, y_mean, y_std)
-        # y_val_sc = std_sc(y_val, y_mean, y_std)
-        # y_test_sc = std_sc(y_test, y_mean, y_std)
-        y_train_sc = minmaxsc(y_train, y_min, y_max)
-        y_val_sc = minmaxsc(y_val, y_min, y_max)
-        y_test_sc = minmaxsc(y_test, y_min, y_max)
+        y_train_sc = std_sc(y_train, y_mean, y_std)
+        y_val_sc = std_sc(y_val, y_mean, y_std)
+        y_test_sc = std_sc(y_test, y_mean, y_std)
 
         indiv_results[site_id] = {
             "X_train": X_train_sc, "X_val": X_val_sc, "X_test": X_test_sc,
@@ -229,7 +199,7 @@ def scale_site():
     concat_results = {"X_train": X_train_all, "X_val": X_val_all, "X_test": X_test_all,
                "y_train": y_train_all, "y_val": y_val_all, "y_test": y_test_all,
                "mask_train": mask_train_all, "mask_val": mask_val_all, "mask_test": mask_test_all,
-                # "X_min": X_min_val, "X_max": X_max_val, "y_min": y_min_val, "y_max": y_max_val
+                "X_mean": X_mean, "X_std": X_std, "y_mean": y_mean, "y_std": y_std
                }
     return concat_results, indiv_results
 

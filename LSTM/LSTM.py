@@ -1,21 +1,14 @@
 import math
-import os
 import sys
-from datetime import datetime
 
-import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
 import utils
 import main
-import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
 from torch import nn
-from torch.optim import RMSprop, Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim import Adam
 
 import numpy as np
 
@@ -48,9 +41,11 @@ def prepare_data():
     y_val = df["y_val"][mask_val].to_numpy()
     y_test = df["y_test"][mask_test].to_numpy()
 
-    X_train_wind, y_train_wind = make_sequences(X_train, y_train, 52)
+    X_train_wind, y_train_wind = make_sequences(X_train, y_train, 80)
+    X_val_wind, y_val_wind = make_sequences(X_val, y_val, 80)
+    X_test_wind, y_test_wind = make_sequences(X_test, y_test, 80)
 
-    return X_train_wind, X_val, X_test, y_train_wind, y_val, y_test
+    return X_train_wind, X_val_wind, X_test_wind, y_train_wind, y_val_wind, y_test_wind
 
 
 class CustomLearningRateScheduler:

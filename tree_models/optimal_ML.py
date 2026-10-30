@@ -14,7 +14,7 @@ from sklearn.metrics import make_scorer, r2_score
 
 def objective(trial):
     gb_learning_rate = trial.suggest_float("gb_learning_rate", 1e-3, 1e-1, log=True)
-    gb_max_depth = trial.suggest_int("gb_max_depth", 3, 12)
+    gb_max_depth = trial.suggest_int("gb_max_depth", 3, 15)
     obj = HistGradientBoostingRegressor(
         learning_rate=gb_learning_rate,
         max_depth=gb_max_depth

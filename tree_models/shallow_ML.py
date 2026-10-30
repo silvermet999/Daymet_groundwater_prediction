@@ -23,6 +23,7 @@ def parse_args(args):
     parser.add_argument("--sheet", default="Niveaux_journaliers", type=str)
     parser.add_argument("--gen_samples")
     parser.add_argument("--plot_prediction")
+    parser.add_argument("--shap")
     parser.add_argument("--run_metrics", help="NSE, pBias, KGE, FMS, FHV, FLV")
     parser.add_argument("--pbias")
     parser.add_argument("--kge")
@@ -161,6 +162,7 @@ if __name__ == "__main__":
     if args.shap:
         explainer = shap.Explainer(model)
         shap_values = explainer(X_train)
+        # First prediction's contribution
         shap.plots.waterfall(shap_values[0], show=False)
         plt.gcf().set_size_inches(20, 20)
         plt.savefig("shapely.png", dpi=300, bbox_inches="tight")
@@ -168,10 +170,18 @@ if __name__ == "__main__":
             "force_first_pred.html",
             shap.plots.force(shap_values[0])
         )
+        # All features' first prediction
         shap.save_html(
             "force_500.html",
             shap.plots.force(shap_values[:500])
         )
+        # All predictions
+        shap.plots.beeswarm(shap_values)
+        plt.gcf().set_size_inches(20, 20)
+        plt.savefig("beeswarm.png", dpi=300, bbox_inches="tight")
+        shap.plots.bar(shap_values)
+        plt.gcf().set_size_inches(20, 20)
+        plt.savefig("bar.png", dpi=300, bbox_inches="tight")
 
 
 
